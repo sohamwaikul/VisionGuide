@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VisionGuide AI Demo</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #111; color: #fff; margin: 0; padding: 20px; }
+    video { width: 100%; max-width: 400px; border-radius: 12px; margin-top: 10px; }
+    button { padding: 15px 30px; font-size: 18px; border-radius: 8px; border: none; background: #007bff; color: white; cursor: pointer; }
+    #log { margin-top: 20px; font-size: 18px; color: #00ffcc; }
+  </style>
+</head>
+<body>
+  <h1>VisionGuide AI</h1>
+  <button id="startBtn">Start Camera & Guidance</button><br>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="log">Status: Press button to start...</div>
+
+  <script>
+    const video = document.getElementById('video');
+    const log = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    
+    // Set up Web Audio API for 3D Panning sound
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function play3DSound(panValue) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const panner = audioCtx.createStereoPanner();
+      
+      panner.pan.value = panValue; // -1 (left ear) to +1 (right ear)
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime); // Beep pitch
+      
+      osc.connect(panner);
+      panner.connect(audioCtx.destination);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15); // Beep duration
+    }
+
+    startBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      log.innerText = "Camera active. Scanning...";
+
+      // Send a camera frame to backend every 500 milliseconds
+      setInterval(captureAndSend, 500);
+    };
+
+    async function captureAndSend() {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      if (!canvas.width) return;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append('file', blob, 'frame.jpg');
+
+        try {
+          const res = await fetch('http://localhost:8000/detect', { method: 'POST', body: formData });
+          const data = await res.json();
+
+          if (data.detections.length > 0) {
+            const item = data.detections[0];
+            log.innerText = `Detected: ${item.object} (Pos: ${item.position})`;
+            play3DSound(item.position); // Plays beep in corresponding ear!
+          } else {
+            log.innerText = "Path clear...";
+          }
+        } catch (e) {
+          log.innerText = "Connecting to backend engine...";
+        }
+      }, 'image/jpeg');
+    }
+  </script>
+</body>
+</html>

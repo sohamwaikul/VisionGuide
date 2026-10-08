@@ -1,0 +1,12 @@
+# Python temporary files
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# YOLO model downloads
+*.pt
+
+# OS specific files
+.DS_Store
+Thumbs.db
